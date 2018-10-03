@@ -158,6 +158,9 @@ class WP_REST_OAuth1_UI {
 			'oauth_verifier' => $verifier,
 			'wp_scope' => '*',
 		);
+		if( $client_key = $_REQUEST['client_key'] ) {
+			$args['client_key'] = $client_key;
+		}
 		$args = apply_filters( 'json_oauth1_callback_args', $args, $this->token );
 		$args = urlencode_deep( $args );
 		$callback = add_query_arg( $args, $callback );
