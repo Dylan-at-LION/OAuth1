@@ -89,6 +89,24 @@ class WP_REST_OAuth1_UI {
 		// Fetch consumer
 		$this->consumer = $consumer = get_post( $this->token['consumer'] );
 
+        $existing_access_token = $authenticator->get_user_access_token( get_current_user_id(), $this->consumer->ID );
+
+        if( $existing_access_token ) {
+            if( ! $this->token['callback'] ) {
+                $callback = get_post_meta( $this->consumer->ID, 'callback', true );
+
+                $this->token['callback'] = $callback;
+            }
+
+            $verifier = $authenticator->authorize_request_token( $this->token['key'] );
+
+            if ( is_wp_error( $verifier ) ) {
+                return $verifier;
+            }
+
+            return $this->handle_callback_redirect( $verifier, $_REQUEST['client_key']  );
+        }
+
 		if ( ! empty( $_POST['wp-submit'] ) ) {
 			check_admin_referer( 'json_oauth1_authorize' );
 
