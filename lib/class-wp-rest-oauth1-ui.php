@@ -83,11 +83,29 @@ class WP_REST_OAuth1_UI {
 		}
 
 		if ( $this->token['authorized'] === true ) {
-			return $this->handle_callback_redirect( $this->token['verifier'] );
+			return $this->handle_callback_redirect( $this->token['verifier'], $_REQUEST['client_key'] );
 		}
 
 		// Fetch consumer
 		$this->consumer = $consumer = get_post( $this->token['consumer'] );
+
+        $existing_access_token = $authenticator->get_user_access_token( get_current_user_id(), $this->consumer->ID );
+
+        if( $existing_access_token ) {
+            if( ! $this->token['callback'] ) {
+                $callback = get_post_meta( $this->consumer->ID, 'callback', true );
+
+                $this->token['callback'] = $callback;
+            }
+
+            $verifier = $authenticator->authorize_request_token( $this->token['key'] );
+
+            if ( is_wp_error( $verifier ) ) {
+                return $verifier;
+            }
+
+            return $this->handle_callback_redirect( $verifier, $_REQUEST['client_key']  );
+        }
 
 		if ( ! empty( $_POST['wp-submit'] ) ) {
 			check_admin_referer( 'json_oauth1_authorize' );
@@ -99,7 +117,7 @@ class WP_REST_OAuth1_UI {
 						return $verifier;
 					}
 
-					return $this->handle_callback_redirect( $verifier );
+					return $this->handle_callback_redirect( $verifier, $_REQUEST['client_key'] );
 
 				case 'cancel':
 					exit;
@@ -135,7 +153,7 @@ class WP_REST_OAuth1_UI {
 	 * @param string $verifier Verification code
 	 * @return null|WP_Error Null on success, error otherwise
 	 */
-	public function handle_callback_redirect( $verifier ) {
+	public function handle_callback_redirect( $verifier, $client_key='' ) {
 		if ( empty( $this->token['callback'] ) || $this->token['callback'] === 'oob' ) {
 			// No callback registered, display verification code to the user
 			login_header( __( 'Access Token', 'rest_oauth1' ) );
@@ -158,6 +176,21 @@ class WP_REST_OAuth1_UI {
 			'oauth_verifier' => $verifier,
 			'wp_scope' => '*',
 		);
+		
+		
+		if( $client_key ) {
+			$args['client_key'] = $client_key;
+		} else if( $client_key = $_REQUEST['client_key'] ) {
+			$args['client_key'] = $client_key;
+		} else {
+			$url_parts = explode( '?', $_SERVER['HTTP_REFERER'] );
+			$query_args = array();
+			parse_str( $url_parts[1], $query_args );
+			if( isset( $query_args['client_key'] ) ) {
+				$args['client_key'] = $query_args['client_key'];
+			}
+		}
+		
 		$args = apply_filters( 'json_oauth1_callback_args', $args, $this->token );
 		$args = urlencode_deep( $args );
 		$callback = add_query_arg( $args, $callback );
